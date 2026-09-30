@@ -1,0 +1,11 @@
+{
+  "baseUrl": "https://127.0.0.1:9443",
+  "token": "",
+  "tokenHeader": "X-SLCE-API-TOKEN",
+  "allowMutations": false,
+  "allowSensitive": false,
+  "insecureTls": false,
+  "timeoutMs": 15000,
+  "mcpAuthToken": "",
+  "mcpPort": 3000
+}

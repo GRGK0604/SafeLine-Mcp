@@ -1,0 +1,24 @@
+{
+  "name": "safeline-swagger-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SafeLine management API MCP server generated from the bundled Swagger 2.0 document",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test",
+    "check": "node --check src/index.js && node --check src/catalog.js && node --check src/client.js && node --check src/http.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.0",
+    "@modelcontextprotocol/server": "^2.2.0",
+    "ajv": "^8.17.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.2.0"
+  }
+}
