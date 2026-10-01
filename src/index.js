@@ -61,7 +61,7 @@ export function createServer(config = loadConfiguration()) {
   });
 
   server.registerTool('call_operation', {
-    description: 'Call an operation from doc.json using its exact key. API token stays server-side. GET is allowed by default; writes and secret endpoints require server-side opt-in.',
+    description: 'Call an operation from docs/doc.json using its exact key. API token stays server-side. GET is allowed by default; writes and secret endpoints require server-side opt-in.',
     inputSchema: z.object({
       operation: z.string().min(1),
       pathParams: z.record(z.string(), z.unknown()).optional(),
@@ -90,7 +90,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     const config = loadConfiguration(args.length ? args[1] : defaultConfigFile);
     await startHttpServer(config, () => createServer(config));
-    console.error('SafeLine MCP Streamable HTTP listening on http://127.0.0.1:' + config.mcpPort + '/mcp');
+    const host = config.mcpHost.includes(':') ? '[' + config.mcpHost + ']' : config.mcpHost;
+    console.error('SafeLine MCP Streamable HTTP listening on http://' + host + ':' + config.mcpPort + '/mcp');
   }
   catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 import { createMcpHandler } from '@modelcontextprotocol/server';
-import { localhostHostValidation, localhostOriginValidation, toNodeHandler } from '@modelcontextprotocol/node';
+import { hostHeaderValidation, localhostHostValidation, localhostOriginValidation, originValidation, toNodeHandler } from '@modelcontextprotocol/node';
 
 export function validBearer(header, secret) {
   if (typeof header !== 'string' || typeof secret !== 'string') return false;
@@ -19,10 +19,18 @@ export async function startHttpServer(config, serverFactory) {
     throw new Error('Streamable HTTP requires a random mcpAuthToken of at least 32 non-whitespace characters in config.json');
   }
   if (typeof serverFactory !== 'function') throw new Error('Streamable HTTP requires a server factory');
+  const mcpHost = config.mcpHost ?? '127.0.0.1';
+  const allowedHosts = config.mcpAllowedHosts ?? [];
+  const allowedOrigins = config.mcpAllowedOrigins ?? [];
+  const loopback = ['localhost', '127.0.0.1', '::1'].includes(mcpHost.toLowerCase());
+  if (!loopback && (!Array.isArray(allowedHosts) || allowedHosts.length === 0)) {
+    throw new Error('Non-loopback mcpHost requires at least one mcpAllowedHosts entry');
+  }
   const handler = createMcpHandler(serverFactory);
   const nodeHandler = toNodeHandler(handler);
-  const validateHost = localhostHostValidation();
-  const validateOrigin = localhostOriginValidation();
+  const validateHost = allowedHosts.length ? hostHeaderValidation(allowedHosts) : localhostHostValidation();
+  const validateOrigin = allowedOrigins.length ? originValidation(allowedOrigins) :
+    loopback ? localhostOriginValidation() : originValidation([]);
 
   const server = createHttpServer((req, res) => {
     if (req.url?.split('?')[0] !== '/mcp') {
@@ -54,7 +62,7 @@ export async function startHttpServer(config, serverFactory) {
   try {
     await new Promise((resolve, reject) => {
       server.once('error', reject);
-      server.listen(config.mcpPort, '127.0.0.1', () => {
+      server.listen(config.mcpPort, mcpHost, () => {
         server.off('error', reject);
         resolve();
       });

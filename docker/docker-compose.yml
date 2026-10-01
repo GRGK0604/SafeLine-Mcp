@@ -1,0 +1,12 @@
+services:
+  safeline-mcp:
+    image: ghcr.io/grgk0604/safeline-mcp:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: safeline-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ../config.json:/app/config.json:ro

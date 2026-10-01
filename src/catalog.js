@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 
-const specPath = fileURLToPath(new URL('../doc.json', import.meta.url));
+const specPath = fileURLToPath(new URL('../docs/doc.json', import.meta.url));
 export const spec = JSON.parse(readFileSync(specPath, 'utf8'));
 
 if (spec.swagger !== '2.0' || !spec.paths || !spec.definitions) {
-  throw new Error('doc.json must be a Swagger 2.0 document with paths and definitions');
+  throw new Error('docs/doc.json must be a Swagger 2.0 document with paths and definitions');
 }
 
 const verbs = ['get', 'post', 'put', 'patch', 'delete'];

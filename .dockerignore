@@ -1,0 +1,10 @@
+**
+!package.json
+!package-lock.json
+!src/
+!src/**
+!docs/
+!docs/doc.json
+!docker/
+docker/*
+!docker/Dockerfile

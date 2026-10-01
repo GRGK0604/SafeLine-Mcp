@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { configuration } from '../src/client.js';
 import { startHttpServer, validBearer } from '../src/http.js';
@@ -47,6 +48,48 @@ test('Streamable HTTP denies unauthenticated requests and serves authenticated c
     assert.equal(status.structuredContent.configured, false);
   } finally {
     if (client) await client.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('custom bind address enforces Host, Origin, and Bearer before serving MCP', async () => {
+  const config = {
+    ...configuration({
+      mcpHost: '0.0.0.0',
+      mcpAllowedHosts: ['mcp.example.test'],
+      mcpAllowedOrigins: ['client.example.test'],
+      mcpAuthToken: secret,
+    }),
+    mcpPort: 0,
+  };
+  const server = await startHttpServer(config, () => createMcpServer(config));
+  assert.equal(server.address().address, '0.0.0.0');
+  const url = 'http://127.0.0.1:' + server.address().port + '/mcp';
+  const initialize = JSON.stringify({
+    jsonrpc: '2.0', id: 1, method: 'initialize',
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'host-test', version: '1.0' } },
+  });
+  const request = headers => new Promise((resolve, reject) => {
+    const req = http.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...headers },
+    }, res => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end(initialize);
+  });
+  try {
+    assert.equal((await request({ Host: 'wrong.example.test', Authorization: 'Bearer ' + secret })).status, 403);
+    assert.equal((await request({ Host: 'mcp.example.test', Origin: 'https://wrong.example.test', Authorization: 'Bearer ' + secret })).status, 403);
+    assert.equal((await request({ Host: 'mcp.example.test', Origin: 'https://client.example.test' })).status, 401);
+    const valid = await request({ Host: 'mcp.example.test', Origin: 'https://client.example.test', Authorization: 'Bearer ' + secret });
+    assert.equal(valid.status, 200);
+    assert.match(valid.body, /protocolVersion/);
+  } finally {
     await new Promise(resolve => server.close(resolve));
   }
 });

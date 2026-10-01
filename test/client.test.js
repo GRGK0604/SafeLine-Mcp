@@ -20,6 +20,28 @@ test('configuration rejects non-loopback HTTP and malformed token headers', () =
   assert.throws(() => configuration({ tlsFingerprintSha256: 'AA' }), /Unknown config key: tlsFingerprintSha256/);
 });
 
+test('configurable MCP bind address requires an explicit Host allowlist outside loopback', () => {
+  const local = configuration({});
+  assert.equal(local.mcpHost, '127.0.0.1');
+  assert.deepEqual(local.mcpAllowedHosts, []);
+  assert.deepEqual(local.mcpAllowedOrigins, []);
+  assert.throws(() => configuration({ mcpHost: '0.0.0.0' }), /requires at least one mcpAllowedHosts/);
+  assert.throws(() => configuration({ mcpHost: 'https:\/\/example.com' }), /mcpHost must be/);
+  assert.throws(() => configuration({ mcpHost: '0.0.0.0:3000' }), /mcpHost must be/);
+  assert.throws(() => configuration({ mcpAllowedHosts: '*' }), /must be an array/);
+  assert.throws(() => configuration({ mcpAllowedHosts: ['*'] }), /entries must be hostnames/);
+  assert.throws(() => configuration({ mcpAllowedOrigins: ['https:\/\/example.com'] }), /entries must be hostnames/);
+  const publicConfig = configuration({
+    mcpHost: '0.0.0.0',
+    mcpAllowedHosts: ['mcp.example.com', '203.0.113.5'],
+    mcpAllowedOrigins: ['client.example.com'],
+  });
+  assert.equal(publicConfig.mcpHost, '0.0.0.0');
+  assert.deepEqual(publicConfig.mcpAllowedHosts, ['mcp.example.com', '203.0.113.5']);
+  assert.deepEqual(publicConfig.mcpAllowedOrigins, ['client.example.com']);
+  assert.equal(configuration({ mcpHost: '::', mcpAllowedHosts: ['[2001:db8::1]'] }).mcpHost, '::');
+});
+
 test('loads JSON config and rejects malformed JSON', () => {
   const dir = mkdtempSync(join(tmpdir(), 'safeline-config-'));
   const file = join(dir, 'config.json');

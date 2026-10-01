@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
+import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +13,22 @@ function isLoopback(hostname) {
   return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname.toLowerCase());
 }
 
+function allowedHostname(value, key) {
+  const dnsName = typeof value === 'string' && value.length <= 253 &&
+    value.split('.').every(label => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label));
+  if (typeof value !== 'string' || !value || value.trim() !== value ||
+      !(isIP(value) === 4 || /^\[[0-9a-fA-F:.]+\]$/.test(value) && isIP(value.slice(1, -1)) === 6 || dnsName)) {
+    throw new Error(key + ' entries must be hostnames or IP addresses without ports or schemes');
+  }
+  return value;
+}
+
+function hostnameList(settings, key) {
+  const list = settings[key] ?? [];
+  if (!Array.isArray(list)) throw new Error(key + ' must be an array');
+  return list.map(value => allowedHostname(value, key));
+}
+
 export function configuration(settings) {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
     throw new Error('Config must be a JSON object');
@@ -19,7 +36,7 @@ export function configuration(settings) {
   const allowed = new Set([
     'baseUrl', 'token', 'tokenHeader', 'allowMutations',
     'allowSensitive', 'insecureTls', 'timeoutMs',
-    'mcpAuthToken', 'mcpPort',
+    'mcpAuthToken', 'mcpPort', 'mcpHost', 'mcpAllowedHosts', 'mcpAllowedOrigins',
   ]);
   for (const key of Object.keys(settings)) {
     if (!allowed.has(key)) throw new Error('Unknown config key: ' + key);
@@ -29,7 +46,7 @@ export function configuration(settings) {
       throw new Error(key + ' must be a boolean');
     }
   }
-  for (const key of ['baseUrl', 'token', 'tokenHeader', 'mcpAuthToken']) {
+  for (const key of ['baseUrl', 'token', 'tokenHeader', 'mcpAuthToken', 'mcpHost']) {
     if (settings[key] !== undefined && typeof settings[key] !== 'string') {
       throw new Error(key + ' must be a string');
     }
@@ -58,6 +75,15 @@ export function configuration(settings) {
   if (!Number.isSafeInteger(mcpPort) || mcpPort < 1 || mcpPort > 65535) {
     throw new Error('mcpPort must be an integer between 1 and 65535');
   }
+  const mcpHost = settings.mcpHost ?? '127.0.0.1';
+  if (mcpHost !== 'localhost' && !isIP(mcpHost)) {
+    throw new Error('mcpHost must be localhost or an IPv4/IPv6 address without a port');
+  }
+  const mcpAllowedHosts = hostnameList(settings, 'mcpAllowedHosts');
+  const mcpAllowedOrigins = hostnameList(settings, 'mcpAllowedOrigins');
+  if (!isLoopback(mcpHost) && mcpAllowedHosts.length === 0) {
+    throw new Error('Non-loopback mcpHost requires at least one mcpAllowedHosts entry');
+  }
   return {
     baseUrl,
     token: settings.token,
@@ -68,6 +94,9 @@ export function configuration(settings) {
     timeoutMs,
     mcpAuthToken: settings.mcpAuthToken,
     mcpPort,
+    mcpHost,
+    mcpAllowedHosts,
+    mcpAllowedOrigins,
   };
 }
 
