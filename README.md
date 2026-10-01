@@ -8,36 +8,44 @@
 
     npm install
 
-先复制示例配置并填写实际的管理地址与 API Token：
+所有配置都通过环境变量传入，不读取配置文件。两个 Token 分别用于访问 SafeLine（SAFELINE_API_TOKEN）和访问 MCP（MCP_AUTH_TOKEN），不能混用。未设置或值为空的变量使用默认值：
 
-    cp config.example.json config.json
-    chmod 600 config.json
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| SAFELINE_BASE_URL | 无 | SafeLine 管理地址，只能是 origin，例如 https://127.0.0.1:9443 |
+| SAFELINE_API_TOKEN | 无 | SafeLine API Token |
+| SAFELINE_TOKEN_HEADER | X-SLCE-API-TOKEN | 向 SafeLine 发送 Token 使用的请求头 |
+| SAFELINE_ALLOW_MUTATIONS | false | 是否允许 POST/PUT/DELETE 等写操作 |
+| SAFELINE_ALLOW_SENSITIVE | false | 是否允许凭据相关操作 |
+| SAFELINE_INSECURE_TLS | false | 是否跳过 TLS 证书验证 |
+| SAFELINE_TIMEOUT_MS | 15000 | 请求超时毫秒数，范围 100–120000 |
+| MCP_AUTH_TOKEN | 无（必填） | MCP 客户端使用的 Bearer Token，至少 32 个字符 |
+| MCP_HOST | 127.0.0.1 | MCP 服务监听地址 |
+| MCP_PORT | 3000 | MCP 服务监听端口 |
+| MCP_ALLOWED_HOSTS | 空 | 允许的 Host，多个值用逗号分隔 |
+| MCP_ALLOWED_ORIGINS | 空 | 允许的 Origin 主机名，多个值用逗号分隔 |
 
-默认从项目根目录的 config.json 读取配置，与运行时的工作目录无关。当前工作区已放置配置文件；其中的两个 Token 分别用于访问 SafeLine 和访问 MCP，不能混用。配置内容示例：
+布尔变量只接受 true 或 false。可以在 shell 中导出变量后运行 npm start，例如：
 
-    {
-      "baseUrl": "https://127.0.0.1:9443",
-      "token": "YOUR_TOKEN",
-      "tokenHeader": "X-SLCE-API-TOKEN",
-      "allowMutations": false,
-      "allowSensitive": false,
-      "insecureTls": false,
-      "timeoutMs": 15000,
-      "mcpAuthToken": "",
-      "mcpHost": "127.0.0.1",
-      "mcpAllowedHosts": [],
-      "mcpAllowedOrigins": [],
-      "mcpPort": 3000
-    }
+    export SAFELINE_BASE_URL=https://127.0.0.1:9443
+    export SAFELINE_API_TOKEN=YOUR_TOKEN
+    export MCP_AUTH_TOKEN=YOUR_MCP_AUTH_TOKEN
+    npm start
 
-直接启动可用 npm start；指定其他配置文件可用 npm start -- --config /path/to/config.json。默认监听 http://127.0.0.1:3000/mcp；监听地址由 mcpHost、端口由 mcpPort 修改。在支持 Streamable HTTP 的 MCP 客户端中填写对应 URL，并设置 Authorization: Bearer <mcpAuthToken> 请求头；不再支持将本服务作为 stdio MCP 子进程接入。
+也可以把变量写进 .env 文件，再让 Node.js 加载它（需要 Node.js 20.6 或更新版本）。示例文件 docker/.env.example 与 docker-compose.yml 放在同一目录：
 
-如需监听所有 IPv4 网卡，可在 config.json 中设置：
+    cp docker/.env.example docker/.env
+    chmod 600 docker/.env
+    node --env-file=docker/.env src/index.js
 
-    "mcpHost": "0.0.0.0",
-    "mcpAllowedHosts": ["mcp.example.com"]
+默认监听 http://127.0.0.1:3000/mcp；监听地址由 MCP_HOST、端口由 MCP_PORT 修改。在支持 Streamable HTTP 的 MCP 客户端中填写对应 URL，并设置 Authorization: Bearer <MCP_AUTH_TOKEN> 请求头；不再支持将本服务作为 stdio MCP 子进程接入。
 
-mcpAllowedHosts 必须填客户端请求的 Host 主机名（不带协议和端口）；若客户端通过公网 IP 访问，也要加入该 IP。非回环监听必须至少填写一个允许的 Host，否则启动失败。IPv6 监听可将 mcpHost 设为 "::"，允许的 IPv6 Host 应写成 "[::1]" 这样的带方括号形式。默认回环监听时可保持允许列表为空，自动只接受 localhost/127.0.0.1/[::1]。默认拒绝非本地 Origin；确实需要时用 mcpAllowedOrigins 填写允许的 Origin 主机名（同样不带协议和端口）。浏览器接入还需由反向代理处理 CORS。
+如需监听所有 IPv4 网卡，可设置：
+
+    MCP_HOST=0.0.0.0
+    MCP_ALLOWED_HOSTS=mcp.example.com
+
+MCP_ALLOWED_HOSTS 必须填客户端请求的 Host 主机名（不带协议和端口）；若客户端通过公网 IP 访问，也要加入该 IP。非回环监听必须至少填写一个允许的 Host，否则启动失败。IPv6 监听可将 MCP_HOST 设为 ::，允许的 IPv6 Host 应写成 [::1] 这样的带方括号形式。默认回环监听时可保持允许列表为空，自动只接受 localhost/127.0.0.1/[::1]。默认拒绝非本地 Origin；确实需要时用 MCP_ALLOWED_ORIGINS 填写允许的 Origin 主机名（同样不带协议和端口）。浏览器接入还需由反向代理处理 CORS。
 
 例如支持 URL 和自定义请求头的客户端可配置为：
 
@@ -50,13 +58,13 @@ mcpAllowedHosts 必须填客户端请求的 Host 主机名（不带协议和端�
       }
     }
 
-Token 只从配置文件读取；config.json 已加入 .gitignore，不要把真实 Token 写进提交的文件。下游 SafeLine API 默认请求头为 X-SLCE-API-TOKEN，可修改 tokenHeader。
+Token 只从环境变量读取；.env 已加入 .gitignore，不要把真实 Token 写进提交的文件。下游 SafeLine API 默认请求头为 X-SLCE-API-TOKEN，可通过 SAFELINE_TOKEN_HEADER 修改。
 
 ## Docker 镜像（手动构建）
 
-将此工作流提交到仓库默认分支后，在 GitHub 的 Actions 页面选择 **Publish Docker image to GHCR → Run workflow**。它只会手动运行：构建并验证 Linux Docker 镜像，然后使用工作流内置的 GITHUB_TOKEN 推送到 GitHub Container Registry，不再上传镜像文件。镜像地址为 `ghcr.io/grgk0604/safeline-mcp`；每次运行都会生成 `manual-<run_number>-<attempt>` 标签，若运行的是默认分支，还会更新 `latest`。镜像不包含 config.json、Token 或本地 node_modules。
+将此工作流提交到仓库默认分支后，在 GitHub 的 Actions 页面选择 **Publish Docker image to GHCR → Run workflow**。它只会手动运行：构建并验证 Linux Docker 镜像，然后使用工作流内置的 GITHUB_TOKEN 推送到 GitHub Container Registry。镜像地址为 `ghcr.io/grgk0604/safeline-mcp`；每次运行都会生成 `manual-<run_number>-<attempt>` 标签，若运行的是默认分支，还会更新 `latest`。镜像不包含 .env、Token 或本地 node_modules。
 
-docker/Dockerfile 和 docker/docker-compose.yml 已放在 docker 目录中。使用 GHCR 镜像部署时，在项目根目录执行：
+docker/Dockerfile 和 docker/docker-compose.yml 已放在 docker 目录中。Compose 会把同目录下的 docker/.env 作为容器环境变量加载，部署前先按上文创建 docker/.env。使用 GHCR 镜像部署时，在项目根目录执行：
 
     docker login ghcr.io
     docker compose -f docker/docker-compose.yml pull
@@ -66,11 +74,11 @@ docker/Dockerfile 和 docker/docker-compose.yml 已放在 docker 目录中。使
 
     docker compose -f docker/docker-compose.yml up -d --build
 
-容器内需要将 config.json 的 mcpHost 设为 "0.0.0.0"，并把客户端实际使用的 Host（例如 "127.0.0.1"）加入 mcpAllowedHosts；否则 Docker 端口映射无法访问或 Host 校验会拒绝请求。若 SafeLine 本身运行在宿主机，baseUrl 也不能继续使用容器内的 127.0.0.1，应改为容器可达的地址。示例仅将端口发布到宿主机回环地址；公网访问请通过 HTTPS 反向代理。
+容器内需要在 docker/.env 中设置 MCP_HOST=0.0.0.0，并把客户端实际使用的 Host（例如 127.0.0.1）加入 MCP_ALLOWED_HOSTS；否则 Docker 端口映射无法访问或 Host 校验会拒绝请求。若 SafeLine 本身运行在宿主机，SAFELINE_BASE_URL 也不能继续使用容器内的 127.0.0.1，应改为容器可达的地址。示例仅将端口发布到宿主机回环地址；公网访问请通过 HTTPS 反向代理。
 
 ## Streamable HTTP 鉴权
 
-运行 npm start，MCP 客户端每次请求都必须携带 Authorization: Bearer <mcpAuthToken>；缺失或错误返回 HTTP 401。mcpAuthToken 是独立于下游 SafeLine token 的随机密钥，至少 32 个字符，当前私有 config.json 已自动生成。新部署可在本机运行以下命令生成并填入 config.json：
+运行 npm start，MCP 客户端每次请求都必须携带 Authorization: Bearer <MCP_AUTH_TOKEN>；缺失或错误返回 HTTP 401。MCP_AUTH_TOKEN 是独立于下游 SafeLine Token 的随机密钥，至少 32 个字符，未设置时服务拒绝启动。可在本机运行以下命令生成并填入 MCP_AUTH_TOKEN：
 
     node -p "require('node:crypto').randomBytes(32).toString('base64url')"
 
@@ -89,11 +97,11 @@ docker/Dockerfile 和 docker/docker-compose.yml 已放在 docker 目录中。使
 
     {"operation":"GET /open/site"}
 
-请以 list_operations 返回的键为准。默认只允许 GET。若需要 POST/PUT/DELETE 等写操作，把 allowMutations 设为 true；访问名称含 token/secret/csrf 或响应结构包含凭据字段的操作，还须把 allowSensitive 设为 true。建议使用最小权限的 SafeLine API Token。
+请以 list_operations 返回的键为准。默认只允许 GET。若需要 POST/PUT/DELETE 等写操作，设置 SAFELINE_ALLOW_MUTATIONS=true；访问名称含 token/secret/csrf 或响应结构包含凭据字段的操作，还须设置 SAFELINE_ALLOW_SENSITIVE=true。建议使用最小权限的 SafeLine API Token。
 
 ## 手动发送 MCP 请求
 
-向 http://127.0.0.1:3000/mcp 发 POST，请求头设置 Authorization: Bearer <config.json 中的 mcpAuthToken>、Content-Type: application/json、Accept: application/json, text/event-stream。这里使用的是 MCP 鉴权密钥，不是下游 SafeLine 的 token；后者由服务端自动加入 X-SLCE-API-TOKEN 请求头。
+向 http://127.0.0.1:3000/mcp 发 POST，请求头设置 Authorization: Bearer <MCP_AUTH_TOKEN>、Content-Type: application/json、Accept: application/json, text/event-stream。这里使用的是 MCP 鉴权密钥，不是下游 SafeLine 的 SAFELINE_API_TOKEN；后者由服务端自动加入 X-SLCE-API-TOKEN 请求头。
 
 第一次请求发送 initialize：
 
@@ -111,9 +119,9 @@ initialize 和 tools/call 的响应可能是 text/event-stream；此时读取 SS
 
 ## 网络安全
 
-- 默认验证 TLS 证书。如需忽略证书验证，可把 insecureTls 设为 true；此时仍使用 HTTPS，但无法验证服务端身份，仅建议在受信任的测试环境中使用。
+- 默认验证 TLS 证书。如需忽略证书验证，可设置 SAFELINE_INSECURE_TLS=true；此时仍使用 HTTPS，但无法验证服务端身份，仅建议在受信任的测试环境中使用。
 - 远程地址必须是 HTTPS；HTTP 仅允许 localhost、127.0.0.1 或 ::1，且不跟随重定向。
-- 默认超时 15 秒，可通过 timeoutMs 调整；请求体与响应体各限制为 1 MiB。
-- MCP 服务默认只监听 127.0.0.1，同时校验 Host、Origin 和 Bearer Token。配置 mcpHost 为 0.0.0.0 或公网网卡地址后，会监听该网卡上的 HTTP；请勿直接向公网暴露明文 Bearer Token，应通过 HTTPS 反向代理访问，并在防火墙限制源地址。
+- 默认超时 15 秒，可通过 SAFELINE_TIMEOUT_MS 调整；请求体与响应体各限制为 1 MiB。
+- MCP 服务默认只监听 127.0.0.1，同时校验 Host、Origin 和 Bearer Token。将 MCP_HOST 设为 0.0.0.0 或公网网卡地址后，会监听该网卡上的 HTTP；请勿直接向公网暴露明文 Bearer Token，应通过 HTTPS 反向代理访问，并在防火墙限制源地址。
 
 运行 npm test 执行单元和 Streamable HTTP 协议测试。没有真实 SafeLine 实例也能运行这些测试；实际管理 API 是否可用还取决于你配置的实例、Token 权限和版本。

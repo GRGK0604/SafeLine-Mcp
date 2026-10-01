@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { spec, operationCount, listOperations, describeOperation, prepareCall } from './catalog.js';
-import { createClient, defaultConfigFile, loadConfiguration } from './client.js';
+import { createClient, loadConfiguration } from './client.js';
 import { startHttpServer } from './http.js';
 
 function result(value, isError = false) {
@@ -19,7 +19,7 @@ function errorResult(error) {
   return result({ error: error instanceof Error ? error.message : String(error) }, true);
 }
 
-export function createServer(config = loadConfiguration()) {
+export function createServer(config) {
   const client = createClient(config, spec);
   const server = new McpServer(
     { name: 'safeline-swagger-mcp', version: '0.1.0' },
@@ -84,11 +84,10 @@ export function createServer(config = loadConfiguration()) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2);
-    if (args.length !== 0 && (args.length !== 2 || args[0] !== '--config' || !args[1])) {
-      throw new Error('Usage: node src/index.js [--config /path/to/config.json]');
+    if (process.argv.length > 2) {
+      throw new Error('Usage: node src/index.js (configure with SAFELINE_* and MCP_* environment variables)');
     }
-    const config = loadConfiguration(args.length ? args[1] : defaultConfigFile);
+    const config = loadConfiguration();
     await startHttpServer(config, () => createServer(config));
     const host = config.mcpHost.includes(':') ? '[' + config.mcpHost + ']' : config.mcpHost;
     console.error('SafeLine MCP Streamable HTTP listening on http://' + host + ':' + config.mcpPort + '/mcp');

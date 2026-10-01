@@ -36,8 +36,8 @@ test('path and query values are validated and serialized', () => {
 });
 
 test('writes and credential-related routes require explicit opt-in', () => {
-  assert.throws(() => prepareCall({ operation: 'POST /open/auth/login', body: {} }, readOnly), /Write operation disabled.*"allowMutations": true in config\.json/);
-  assert.throws(() => prepareCall({ operation: 'GET /open/auth/token' }, readOnly), /Credential-related operation disabled.*"allowSensitive": true in config\.json/);
+  assert.throws(() => prepareCall({ operation: 'POST /open/auth/login', body: {} }, readOnly), /Write operation disabled.*SAFELINE_ALLOW_MUTATIONS=true/);
+  assert.throws(() => prepareCall({ operation: 'GET /open/auth/token' }, readOnly), /Credential-related operation disabled.*SAFELINE_ALLOW_SENSITIVE=true/);
   assert.throws(() => prepareCall({ operation: 'GET /open/auth/csrf' }, readOnly), /Credential-related operation disabled/);
   assert.throws(() => prepareCall({ operation: 'GET /open/cert/{id}', pathParams: { id: 1 } }, readOnly), /Credential-related operation disabled/);
   assert.throws(() => prepareCall({ operation: 'POST /open/auth/login' }, fullAccess), /Missing required body/);

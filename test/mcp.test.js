@@ -3,22 +3,17 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { once } from 'node:events';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { configuration } from '../src/client.js';
+import { loadConfiguration } from '../src/client.js';
 import { startHttpServer } from '../src/http.js';
 import { createServer as createMcpServer } from '../src/index.js';
 
 const secret = 'test-static-bearer-token-with-at-least-32-chars';
 
-function temporaryConfig(settings) {
-  const dir = mkdtempSync(join(tmpdir(), 'safeline-mcp-test-'));
-  const file = join(dir, 'config.json');
-  writeFileSync(file, JSON.stringify(settings), { mode: 0o600 });
-  return { file, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+function childEnv(settings) {
+  const inherited = Object.entries(process.env).filter(([name]) => !/^(SAFELINE|MCP)_/.test(name));
+  return { ...Object.fromEntries(inherited), ...settings };
 }
 
 async function unusedPort() {
@@ -61,9 +56,11 @@ function mcpClient(url) {
 
 test('CLI defaults to authenticated Streamable HTTP and exposes safe tools', async () => {
   const port = await unusedPort();
-  const config = temporaryConfig({ baseUrl: 'https://127.0.0.1:9443', token: '', mcpAuthToken: secret, mcpPort: port });
   const script = fileURLToPath(new URL('../src/index.js', import.meta.url));
-  const child = spawn(process.execPath, [script, '--config', config.file], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(process.execPath, [script], {
+    env: childEnv({ SAFELINE_BASE_URL: 'https://127.0.0.1:9443', MCP_AUTH_TOKEN: secret, MCP_PORT: String(port) }),
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
   let client;
   try {
     await waitForReady(child);
@@ -88,7 +85,6 @@ test('CLI defaults to authenticated Streamable HTTP and exposes safe tools', asy
       child.kill('SIGTERM');
       await once(child, 'close');
     }
-    config.cleanup();
   }
 });
 
@@ -102,7 +98,7 @@ test('Streamable HTTP call_operation forwards GET to the configured SafeLine ori
   api.listen(0, '127.0.0.1');
   await once(api, 'listening');
 
-  const config = { ...configuration({ baseUrl: 'http://127.0.0.1:' + api.address().port, token: 'http-test-token' }), mcpPort: 0, mcpAuthToken: secret };
+  const config = { ...loadConfiguration({ SAFELINE_BASE_URL: 'http://127.0.0.1:' + api.address().port, SAFELINE_API_TOKEN: 'http-test-token' }), mcpPort: 0, mcpAuthToken: secret };
   const server = await startHttpServer(config, () => createMcpServer(config));
   const mcp = mcpClient('http://127.0.0.1:' + server.address().port + '/mcp');
   try {
@@ -122,14 +118,16 @@ test('Streamable HTTP call_operation forwards GET to the configured SafeLine ori
   }
 });
 
-test('removed stdio/HTTP-mode flag is rejected', async () => {
-  const script = fileURLToPath(new URL('../src/index.js', import.meta.url));
-  const child = spawn(process.execPath, [script, '--http'], { stdio: ['ignore', 'ignore', 'pipe'] });
-  const result = await new Promise(resolve => {
-    let stderr = '';
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
-    child.on('close', code => resolve({ code, stderr }));
+for (const args of [['--http'], ['--config', 'config.json']]) {
+  test('removed CLI flag ' + args[0] + ' is rejected', async () => {
+    const script = fileURLToPath(new URL('../src/index.js', import.meta.url));
+    const child = spawn(process.execPath, [script, ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const result = await new Promise(resolve => {
+      let stderr = '';
+      child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+      child.on('close', code => resolve({ code, stderr }));
+    });
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /Usage: node src\/index.js \(configure with SAFELINE_\* and MCP_\* environment variables\)/);
   });
-  assert.equal(result.code, 1);
-  assert.match(result.stderr, /Usage: node src\/index.js \[--config/);
-});
+}

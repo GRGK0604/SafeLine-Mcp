@@ -8,5 +8,5 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
-    volumes:
-      - ../config.json:/app/config.json:ro
+    env_file:
+      - .env

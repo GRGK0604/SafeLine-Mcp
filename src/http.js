@@ -16,16 +16,10 @@ export function validBearer(header, secret) {
 export async function startHttpServer(config, serverFactory) {
   if (typeof config.mcpAuthToken !== 'string' || config.mcpAuthToken.length < 32 ||
       Array.from(config.mcpAuthToken).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) {
-    throw new Error('Streamable HTTP requires a random mcpAuthToken of at least 32 non-whitespace characters in config.json');
+    throw new Error('Streamable HTTP requires a random MCP_AUTH_TOKEN of at least 32 non-whitespace characters');
   }
-  if (typeof serverFactory !== 'function') throw new Error('Streamable HTTP requires a server factory');
-  const mcpHost = config.mcpHost ?? '127.0.0.1';
-  const allowedHosts = config.mcpAllowedHosts ?? [];
-  const allowedOrigins = config.mcpAllowedOrigins ?? [];
+  const { mcpHost, mcpAllowedHosts: allowedHosts, mcpAllowedOrigins: allowedOrigins } = config;
   const loopback = ['localhost', '127.0.0.1', '::1'].includes(mcpHost.toLowerCase());
-  if (!loopback && (!Array.isArray(allowedHosts) || allowedHosts.length === 0)) {
-    throw new Error('Non-loopback mcpHost requires at least one mcpAllowedHosts entry');
-  }
   const handler = createMcpHandler(serverFactory);
   const nodeHandler = toNodeHandler(handler);
   const validateHost = allowedHosts.length ? hostHeaderValidation(allowedHosts) : localhostHostValidation();

@@ -11,7 +11,7 @@ if (spec.swagger !== '2.0' || !spec.paths || !spec.definitions) {
 
 const verbs = ['get', 'post', 'put', 'patch', 'delete'];
 const catalog = new Map();
-const ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: false });
+const ajv = new Ajv({ allErrors: true, strict: false });
 const validators = new Map();
 
 // The source Swagger includes repeated enum entries; Ajv rejects these as a
@@ -155,10 +155,10 @@ export function prepareCall({ operation, pathParams, query, body }, options = {}
   const op = catalog.get(operation);
   if (!op) throw new Error('Unknown operation. Use list_operations to find an exact key.');
   if (op.mutating && !options.allowMutations) {
-    throw new Error('Write operation disabled. Set "allowMutations": true in config.json to opt in.');
+    throw new Error('Write operation disabled. Set SAFELINE_ALLOW_MUTATIONS=true to opt in.');
   }
   if (op.sensitive && !options.allowSensitive) {
-    throw new Error('Credential-related operation disabled. Set "allowSensitive": true in config.json to opt in.');
+    throw new Error('Credential-related operation disabled. Set SAFELINE_ALLOW_SENSITIVE=true to opt in.');
   }
 
   const paths = ensureObject(pathParams, 'pathParams');

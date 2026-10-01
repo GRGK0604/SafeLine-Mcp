@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { configuration } from '../src/client.js';
+import { loadConfiguration } from '../src/client.js';
 import { startHttpServer, validBearer } from '../src/http.js';
 import { createServer as createMcpServer } from '../src/index.js';
 
@@ -16,12 +16,12 @@ test('bearer verifier rejects missing and incorrect credentials', () => {
 });
 
 test('Streamable HTTP fails closed without a strong configured token', async () => {
-  await assert.rejects(startHttpServer({ mcpPort: 0 }), /requires a random mcpAuthToken/);
-  await assert.rejects(startHttpServer({ mcpPort: 0, mcpAuthToken: 'short' }), /requires a random mcpAuthToken/);
+  await assert.rejects(startHttpServer({ mcpPort: 0 }), /requires a random MCP_AUTH_TOKEN/);
+  await assert.rejects(startHttpServer({ mcpPort: 0, mcpAuthToken: 'short' }), /requires a random MCP_AUTH_TOKEN/);
 });
 
 test('Streamable HTTP denies unauthenticated requests and serves authenticated clients', async () => {
-  const config = { ...configuration({ baseUrl: 'https://127.0.0.1:9443', token: '' }), mcpPort: 0, mcpAuthToken: secret };
+  const config = { ...loadConfiguration({ SAFELINE_BASE_URL: 'https://127.0.0.1:9443' }), mcpPort: 0, mcpAuthToken: secret };
   const server = await startHttpServer(config, () => createMcpServer(config));
   const url = 'http://127.0.0.1:' + server.address().port + '/mcp';
   let client;
@@ -54,11 +54,11 @@ test('Streamable HTTP denies unauthenticated requests and serves authenticated c
 
 test('custom bind address enforces Host, Origin, and Bearer before serving MCP', async () => {
   const config = {
-    ...configuration({
-      mcpHost: '0.0.0.0',
-      mcpAllowedHosts: ['mcp.example.test'],
-      mcpAllowedOrigins: ['client.example.test'],
-      mcpAuthToken: secret,
+    ...loadConfiguration({
+      MCP_HOST: '0.0.0.0',
+      MCP_ALLOWED_HOSTS: 'mcp.example.test',
+      MCP_ALLOWED_ORIGINS: 'client.example.test',
+      MCP_AUTH_TOKEN: secret,
     }),
     mcpPort: 0,
   };

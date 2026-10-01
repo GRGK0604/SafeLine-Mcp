@@ -2,59 +2,58 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { configuration, createClient, loadConfiguration } from '../src/client.js';
+import { createClient, loadConfiguration } from '../src/client.js';
 import { prepareCall, spec } from '../src/catalog.js';
 
-test('configuration rejects non-loopback HTTP and malformed token headers', () => {
-  assert.throws(() => configuration({ baseUrl: 'http://example.com:9443' }), /HTTPS/);
-  assert.throws(() => configuration({ tokenHeader: 'Bad Header' }), /Invalid tokenHeader/);
-  assert.throws(() => configuration({ baseUrl: 'https://example.com/api' }), /must be an origin/);
-  assert.throws(() => configuration({ allowMutations: 'true' }), /must be a boolean/);
-  assert.throws(() => configuration({ unknownKey: true }), /Unknown config key/);
-  assert.throws(() => configuration({ mcpPort: 0 }), /mcpPort must be an integer/);
-  assert.throws(() => configuration({ mcpAuthToken: 123 }), /mcpAuthToken must be a string/);
-  assert.throws(() => configuration({ caFile: 'certs/ca.pem' }), /Unknown config key: caFile/);
-  assert.throws(() => configuration({ tlsFingerprintSha256: 'AA' }), /Unknown config key: tlsFingerprintSha256/);
+test('configuration rejects non-loopback HTTP and malformed values', () => {
+  assert.throws(() => loadConfiguration({ SAFELINE_BASE_URL: 'http://example.com:9443' }), /HTTPS/);
+  assert.throws(() => loadConfiguration({ SAFELINE_TOKEN_HEADER: 'Bad Header' }), /Invalid SAFELINE_TOKEN_HEADER/);
+  assert.throws(() => loadConfiguration({ SAFELINE_BASE_URL: 'https://example.com/api' }), /must be an origin/);
+  assert.throws(() => loadConfiguration({ SAFELINE_ALLOW_MUTATIONS: 'yes' }), /SAFELINE_ALLOW_MUTATIONS must be true or false/);
+  assert.throws(() => loadConfiguration({ SAFELINE_TIMEOUT_MS: '15s' }), /SAFELINE_TIMEOUT_MS must be an integer/);
+  assert.throws(() => loadConfiguration({ MCP_PORT: '0' }), /MCP_PORT must be an integer/);
+  assert.throws(() => loadConfiguration({ MCP_PORT: '3000.5' }), /MCP_PORT must be an integer/);
 });
 
 test('configurable MCP bind address requires an explicit Host allowlist outside loopback', () => {
-  const local = configuration({});
+  const local = loadConfiguration({});
   assert.equal(local.mcpHost, '127.0.0.1');
+  assert.equal(local.mcpPort, 3000);
   assert.deepEqual(local.mcpAllowedHosts, []);
   assert.deepEqual(local.mcpAllowedOrigins, []);
-  assert.throws(() => configuration({ mcpHost: '0.0.0.0' }), /requires at least one mcpAllowedHosts/);
-  assert.throws(() => configuration({ mcpHost: 'https:\/\/example.com' }), /mcpHost must be/);
-  assert.throws(() => configuration({ mcpHost: '0.0.0.0:3000' }), /mcpHost must be/);
-  assert.throws(() => configuration({ mcpAllowedHosts: '*' }), /must be an array/);
-  assert.throws(() => configuration({ mcpAllowedHosts: ['*'] }), /entries must be hostnames/);
-  assert.throws(() => configuration({ mcpAllowedOrigins: ['https:\/\/example.com'] }), /entries must be hostnames/);
-  const publicConfig = configuration({
-    mcpHost: '0.0.0.0',
-    mcpAllowedHosts: ['mcp.example.com', '203.0.113.5'],
-    mcpAllowedOrigins: ['client.example.com'],
+  assert.throws(() => loadConfiguration({ MCP_HOST: '0.0.0.0' }), /requires at least one MCP_ALLOWED_HOSTS/);
+  assert.throws(() => loadConfiguration({ MCP_HOST: 'https://example.com' }), /MCP_HOST must be/);
+  assert.throws(() => loadConfiguration({ MCP_HOST: '0.0.0.0:3000' }), /MCP_HOST must be/);
+  assert.throws(() => loadConfiguration({ MCP_ALLOWED_HOSTS: '*' }), /entries must be hostnames/);
+  assert.throws(() => loadConfiguration({ MCP_ALLOWED_ORIGINS: 'https://example.com' }), /entries must be hostnames/);
+  const publicConfig = loadConfiguration({
+    MCP_HOST: '0.0.0.0',
+    MCP_ALLOWED_HOSTS: 'mcp.example.com, 203.0.113.5',
+    MCP_ALLOWED_ORIGINS: 'client.example.com',
   });
   assert.equal(publicConfig.mcpHost, '0.0.0.0');
   assert.deepEqual(publicConfig.mcpAllowedHosts, ['mcp.example.com', '203.0.113.5']);
   assert.deepEqual(publicConfig.mcpAllowedOrigins, ['client.example.com']);
-  assert.equal(configuration({ mcpHost: '::', mcpAllowedHosts: ['[2001:db8::1]'] }).mcpHost, '::');
+  assert.equal(loadConfiguration({ MCP_HOST: '::', MCP_ALLOWED_HOSTS: '[2001:db8::1]' }).mcpHost, '::');
 });
 
-test('loads JSON config and rejects malformed JSON', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'safeline-config-'));
-  const file = join(dir, 'config.json');
-  try {
-    writeFileSync(file, JSON.stringify({ baseUrl: 'https://127.0.0.1:9443', token: 'private', allowMutations: true }));
-    const config = loadConfiguration(file);
-    assert.equal(config.token, 'private');
-    assert.equal(config.allowMutations, true);
-    writeFileSync(file, '{ bad json');
-    assert.throws(() => loadConfiguration(file), /Invalid JSON in config file/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+test('reads settings from environment variables and treats empty values as unset', () => {
+  const config = loadConfiguration({
+    SAFELINE_BASE_URL: 'https://127.0.0.1:9443',
+    SAFELINE_API_TOKEN: 'private',
+    SAFELINE_ALLOW_MUTATIONS: 'true',
+    SAFELINE_ALLOW_SENSITIVE: '',
+    SAFELINE_TIMEOUT_MS: '5000',
+    MCP_AUTH_TOKEN: '',
+    MCP_PORT: '',
+  });
+  assert.equal(config.baseUrl.origin, 'https://127.0.0.1:9443');
+  assert.equal(config.token, 'private');
+  assert.equal(config.allowMutations, true);
+  assert.equal(config.allowSensitive, false);
+  assert.equal(config.timeoutMs, 5000);
+  assert.equal(config.mcpAuthToken, undefined);
+  assert.equal(config.mcpPort, 3000);
 });
 
 test('client sends the token and request body only to the configured API origin', async () => {
@@ -71,7 +70,7 @@ test('client sends the token and request body only to the configured API origin'
   await once(server, 'listening');
   try {
     const port = server.address().port;
-    const config = configuration({ baseUrl: 'http://127.0.0.1:' + port, token: 'private-test-token' });
+    const config = loadConfiguration({ SAFELINE_BASE_URL: 'http://127.0.0.1:' + port, SAFELINE_API_TOKEN: 'private-test-token' });
     const client = createClient(config, spec);
     const list = await client.request(prepareCall({ operation: 'GET /open/audit_log', query: { page: 1 } }, config));
     assert.equal(list.status, 200);
@@ -90,6 +89,24 @@ test('client sends the token and request body only to the configured API origin'
   }
 });
 
+test('client parses JSON bodies with leading whitespace even without a JSON content type', async () => {
+  const server = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('\n  {"msg":"success","data":[1]}');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const config = loadConfiguration({ SAFELINE_BASE_URL: 'http://127.0.0.1:' + server.address().port, SAFELINE_API_TOKEN: 'test' });
+    const response = await createClient(config, spec).request(prepareCall({ operation: 'GET /open/audit_log' }, config));
+    assert.equal(response.ok, true);
+    assert.deepEqual(response.data, { msg: 'success', data: [1] });
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
 test('client refuses responses exceeding the size limit', async () => {
   const server = http.createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/plain');
@@ -98,7 +115,7 @@ test('client refuses responses exceeding the size limit', async () => {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   try {
-    const config = configuration({ baseUrl: 'http://127.0.0.1:' + server.address().port, token: 'test' });
+    const config = loadConfiguration({ SAFELINE_BASE_URL: 'http://127.0.0.1:' + server.address().port, SAFELINE_API_TOKEN: 'test' });
     await assert.rejects(createClient(config, spec).request(
       prepareCall({ operation: 'GET /open/audit_log' }, config)
     ), /exceeds 1 MiB/);
